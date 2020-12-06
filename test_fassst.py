@@ -43,6 +43,17 @@ def list_int_loop():
     return x
 
 
+def class_loop():
+    class Test:
+        def __init__(self, x):
+            self.x = x
+
+    x = 0
+    for i in [Test(1), Test(2), Test(3)]:
+        x += i.x
+    return x
+
+
 @pytest.mark.parametrize(
     "fn",
     [
@@ -50,6 +61,7 @@ def list_int_loop():
         enumerate_loop,
         list_str_loop,
         list_int_loop,
+        class_loop,
     ],
 )
 def test_original(benchmark, fn):
@@ -63,6 +75,7 @@ def test_original(benchmark, fn):
         enumerate_loop,
         list_str_loop,
         list_int_loop,
+        class_loop,
     ],
 )
 def test_fast(benchmark, fn):
