@@ -1,30 +1,10 @@
 import ast
 import dis
-
-# import functools
+import functools
 import inspect
 import textwrap
 import types
 import typing
-
-# fn.__code__ = types.CodeType(
-#         code.co_argcount,
-#         code.co_posonlyargcount,
-#         code.co_kwonlyargcount,
-#         code.co_nlocals,
-#         code.co_stacksize,
-#         code.co_flags,
-#         code.co_code,
-#         code.co_consts,
-#         code.co_names,
-#         code.co_varnames,
-#         code.co_filename,
-#         code.co_name,
-#         code.co_firstlineno,
-#         code.co_lnotab,
-#         code.co_freevars,
-#         code.co_cellvars,
-# )
 
 
 class InlineFor(ast.NodeTransformer):
@@ -68,32 +48,36 @@ def fast(fn):
     new_code = compile(new_tree, filename=code.co_filename, mode="exec")
     new_fn_code = new_code.co_consts[0]
 
-    def new_fn():
+    # Return a new function to leave the original unaltered.
+    args = [
+        new_fn_code.co_argcount,
+        new_fn_code.co_nlocals,
+        new_fn_code.co_stacksize,
+        new_fn_code.co_flags,
+        new_fn_code.co_code,
+        new_fn_code.co_consts,
+        new_fn_code.co_names,
+        new_fn_code.co_varnames,
+        new_fn_code.co_filename,
+        new_fn_code.co_name,
+        new_fn_code.co_firstlineno,
+        new_fn_code.co_lnotab,
+        new_fn_code.co_freevars,
+        new_fn_code.co_cellvars,
+    ]
+    try:
+        args.insert(1, new_fn_code.co_kwonlyargcount)  # Py3
+        args.insert(1, new_fn_code.co_posonlyargcount)  # Py38+
+    except AttributeError:
         pass
 
-    new_fn.__code__ = new_fn_code
-    return new_fn
-
-    # code = new_code
-    # # Return a new function to leave the original unaltered.
-    # args = [
-    #         code.co_argcount,  code.co_nlocals,     code.co_stacksize,
-    #         code.co_flags,     fn.__code__.co_code, code.co_consts,
-    #         code.co_names,     code.co_varnames,    code.co_filename,
-    #         code.co_name,      code.co_firstlineno, code.co_lnotab,
-    #         code.co_freevars,  code.co_cellvars,
-    # ]
-    # try:
-    #     args.insert(1, code.co_kwonlyargcount)
-    # except AttributeError:
-    #     pass
-
-    # return functools.update_wrapper(types.FunctionType(
-    #         types.CodeType(
-    #             *args
-    #         ),
-    #         fn.__globals__,
-    #         fn.__name__,
-    #         fn.__defaults__,
-    #         fn.__closure__,
-    # ))
+    return functools.update_wrapper(
+        types.FunctionType(
+            types.CodeType(*args),
+            fn.__globals__,
+            fn.__name__,
+            fn.__defaults__,
+            fn.__closure__,
+        ),
+        fn,
+    )
