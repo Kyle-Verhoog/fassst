@@ -1,4 +1,6 @@
 import ast
+import bytecode as bc
+import bytecode.peephole_opt as opt
 import dis
 import functools
 import inspect
@@ -46,10 +48,36 @@ def iterator_elements(iter_node):
     raise NotImplementedError(ast.dump(iter_node))
 
 
+placeholder_prefix = ".fassst_loop_"
+
+
+def make_placeholder(ty, *args):
+    meta = ",".join([ty] + list(map(str, args)))
+    return ast.fix_missing_locations(
+        ast.Expr(value=ast.Name(f"{placeholder_prefix}{meta}", ctx=ast.Load()))
+    )
+
+
+def is_placeholder(instruction):
+    return (
+        isinstance(instruction, (bc.Instr, bc.ConcreteInstr))
+        and instruction.name == "LOAD_GLOBAL"
+        and instruction.arg.startswith(placeholder_prefix)
+    )
+
+
+def read_placeholder(instruction):
+    assert is_placeholder(instruction)
+    ty, *args = instruction.arg[len(placeholder_prefix) :].split(",")
+    return ty, *[int(n) for n in args]
+
+
 class InlineFor(ast.NodeTransformer):
     def __init__(self, code, filename):
         self.code = code
         self.filename = filename
+        self.loop_id = 0
+        self.loop_id_stack = []
         super()
 
     def visit_For(self, node):
@@ -60,8 +88,12 @@ class InlineFor(ast.NodeTransformer):
         if not is_pure(node.iter):
             return node
 
+        loop_id = self.loop_id
+        self.loop_id_stack.append(loop_id)
+        self.loop_id += 1
+
         new_body = []
-        for x in iterator_elements(node.iter):
+        for i, x in enumerate(iterator_elements(node.iter)):
             # FIXME: this should probably use the location the expression
             # actually appeared in (the range(n) call or the element in a
             # literal list/tuple).
@@ -69,8 +101,20 @@ class InlineFor(ast.NodeTransformer):
             new_body.append(
                 ast.copy_location(ast.Assign(targets=[node.target], value=x), node)
             )
-            new_body.extend(node.body)
+            new_body.extend([self.visit(n) for n in node.body])
+            new_body.append(make_placeholder("iteration_end", loop_id, i))
+        new_body.append(make_placeholder("loop_end", loop_id))
+
+        self.loop_id_stack.pop()
         return new_body
+
+    def visit_Break(self, node):
+        loop_id = self.loop_id_stack[-1]
+        return make_placeholder("break", loop_id)
+
+    def visit_Continue(self, node):
+        loop_id = self.loop_id_stack[-1]
+        return make_placeholder("continue", loop_id)
 
 
 def fast(fn):
@@ -88,6 +132,40 @@ def fast(fn):
     # print(ast.dump(new_tree.body[0], indent=2))
     new_code = compile(new_tree, filename=code.co_filename, mode="exec")
     new_fn_code = new_code.co_consts[0]
+
+    nremoved = 0
+    bytecode = bc.Bytecode.from_code(new_fn_code)
+    labels = {}
+    iteration_id = 0
+    for i, inst in enumerate(bytecode):
+        if is_placeholder(inst):
+            ty, *args = read_placeholder(inst)
+            if ty == "break":
+                (loop_id,) = args
+                label = labels.setdefault(("loop_end", loop_id), bc.Label())
+                bytecode[i] = bc.Instr("JUMP_ABSOLUTE", arg=label)
+            elif ty == "continue":
+                (loop_id,) = args
+                label = labels.setdefault(
+                    ("iteration_end", loop_id, iteration_id), bc.Label()
+                )
+                bytecode[i] = bc.Instr("JUMP_ABSOLUTE", arg=label)
+            elif ty == "iteration_end":
+                loop_id, iteration_id = args
+                label = labels.setdefault(
+                    ("iteration_end", loop_id, iteration_id), bc.Label()
+                )
+                iteration_id += 1
+                bytecode[i] = label
+            elif ty == "loop_end":
+                loop_id, = args
+                iteration_id = 0
+                label = labels.setdefault(("loop_end", loop_id), bc.Label())
+                bytecode[i] = label
+
+            bytecode[i + 1] = bc.Instr("NOP")  # replace the POP_TOP instruction
+
+    new_fn_code = opt.PeepholeOptimizer().optimize(bytecode.to_code())
 
     # Return a new function to leave the original unaltered.
     args = [

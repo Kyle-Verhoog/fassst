@@ -21,7 +21,7 @@ setup(
     license="Apache 2",
     py_modules=["fassst"],
     python_requires=">=3.8",
-    install_requires=[],
+    install_requires=["bytecode>=0.11.0"],
     setup_requires=["setuptools_scm"],
     use_scm_version=True,
 )
