@@ -63,16 +63,19 @@ def local_value_list_loop():
     return x
 
 
+test_fns = [
+    range_loop,
+    enumerate_loop,
+    list_str_loop,
+    list_int_loop,
+    class_loop,
+    local_value_list_loop,
+]
+
+
 @pytest.mark.parametrize(
     "fn",
-    [
-        range_loop,
-        enumerate_loop,
-        list_str_loop,
-        list_int_loop,
-        class_loop,
-        local_value_list_loop,
-    ],
+    test_fns,
 )
 def test_original(benchmark, fn):
     result = benchmark(fn)
@@ -80,14 +83,7 @@ def test_original(benchmark, fn):
 
 @pytest.mark.parametrize(
     "fn",
-    [
-        range_loop,
-        enumerate_loop,
-        list_str_loop,
-        list_int_loop,
-        class_loop,
-        local_value_list_loop,
-    ],
+    test_fns,
 )
 def test_fast(benchmark, fn):
     result = benchmark(fast(fn))
