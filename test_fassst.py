@@ -43,14 +43,23 @@ def list_int_loop():
     return x
 
 
-def class_loop():
-    class Test:
-        def __init__(self, x):
-            self.x = x
+class XHolder:
+    def __init__(self, x):
+        self.x = x
 
+
+def class_loop():
     x = 0
-    for i in [Test(1), Test(2), Test(3)]:
+    for i in [XHolder(1), XHolder(2), XHolder(3)]:
         x += i.x
+    return x
+
+
+def local_value_list_loop():
+    y = 234
+    x = 0
+    for i in [y, y, y]:
+        x += i
     return x
 
 
@@ -62,6 +71,7 @@ def class_loop():
         list_str_loop,
         list_int_loop,
         class_loop,
+        local_value_list_loop,
     ],
 )
 def test_original(benchmark, fn):
@@ -76,6 +86,7 @@ def test_original(benchmark, fn):
         list_str_loop,
         list_int_loop,
         class_loop,
+        local_value_list_loop,
     ],
 )
 def test_fast(benchmark, fn):
