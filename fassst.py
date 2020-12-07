@@ -36,13 +36,7 @@ def iterator_elements(iter_node):
         inner_elems = iterator_elements(iter_node.args[0])
         return [
             # See FIXME below about expression locations
-            ast.Tuple(
-                elts=[
-                    ast.fix_missing_locations(ast.Constant(i)),
-                    ast.fix_missing_locations(el),
-                ],
-                ctx=ast.Load(),
-            )
+            ast.Tuple(elts=[ast.Constant(i), el,], ctx=ast.Load(),)
             for i, el in enumerate(inner_elems)
         ]
     raise NotImplementedError(ast.dump(iter_node))
@@ -53,9 +47,7 @@ placeholder_prefix = ".fassst_loop_"
 
 def make_placeholder(ty, *args):
     meta = ",".join([ty] + list(map(str, args)))
-    return ast.fix_missing_locations(
-        ast.Expr(value=ast.Name(f"{placeholder_prefix}{meta}", ctx=ast.Load()))
-    )
+    return ast.Expr(value=ast.Name(f"{placeholder_prefix}{meta}", ctx=ast.Load()))
 
 
 def is_placeholder(instruction):
@@ -69,7 +61,7 @@ def is_placeholder(instruction):
 def read_placeholder(instruction):
     assert is_placeholder(instruction)
     ty, *args = instruction.arg[len(placeholder_prefix) :].split(",")
-    return ty, *[int(n) for n in args]
+    return (ty, *[int(n) for n in args])
 
 
 class InlineFor(ast.NodeTransformer):
@@ -78,7 +70,7 @@ class InlineFor(ast.NodeTransformer):
         self.filename = filename
         self.loop_id = 0
         self.loop_id_stack = []
-        super()
+        super().__init__()
 
     def visit_For(self, node):
         def is_pure(node):
@@ -94,10 +86,6 @@ class InlineFor(ast.NodeTransformer):
 
         new_body = []
         for i, x in enumerate(iterator_elements(node.iter)):
-            # FIXME: this should probably use the location the expression
-            # actually appeared in (the range(n) call or the element in a
-            # literal list/tuple).
-            ast.fix_missing_locations(x)
             new_body.append(
                 ast.copy_location(ast.Assign(targets=[node.target], value=x), node)
             )
@@ -132,6 +120,8 @@ def fast(fn):
     # print(ast.dump(tree, indent=2))
 
     new_tree = InlineFor(src, code.co_filename).visit(tree)
+    # FIXME: We should properly set the locations of things
+    new_tree = ast.fix_missing_locations(new_tree)
 
     # After
     # print(ast.dump(new_tree.body[0], indent=2))
@@ -163,7 +153,7 @@ def fast(fn):
                 iteration_id += 1
                 bytecode[i] = label
             elif ty == "loop_end":
-                loop_id, = args
+                (loop_id,) = args
                 iteration_id = 0
                 label = labels.setdefault(("loop_end", loop_id), bc.Label())
                 bytecode[i] = label
