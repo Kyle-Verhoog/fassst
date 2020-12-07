@@ -83,6 +83,18 @@ def multiple_loops():
     return n
 
 
+def nested_loops():
+    n = 0
+    for i in range(3):
+        if i == 1:
+            break
+        for i in range(5):
+            n += 3
+            if i == 3:
+                continue
+    return n
+
+
 test_fns = [
     range_loop,
     enumerate_loop,
@@ -92,6 +104,7 @@ test_fns = [
     local_value_list_loop,
     break_continue,
     multiple_loops,
+    nested_loops,
 ]
 
 

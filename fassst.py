@@ -101,7 +101,12 @@ class InlineFor(ast.NodeTransformer):
             new_body.append(
                 ast.copy_location(ast.Assign(targets=[node.target], value=x), node)
             )
-            new_body.extend([self.visit(n) for n in node.body])
+            for n in node.body:
+                new_n = self.visit(n)
+                if isinstance(new_n, list):
+                    new_body.extend(new_n)
+                else:
+                    new_body.append(new_n)
             new_body.append(make_placeholder("iteration_end", loop_id, i))
         new_body.append(make_placeholder("loop_end", loop_id))
 
