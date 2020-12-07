@@ -24,19 +24,25 @@ def is_constant_range(node):
     )
 
 
-def iterator_elements(iter_node, code):
+def iterator_elements(iter_node):
     if isinstance(iter_node, (ast.List, ast.Tuple)):
-        return [ast.get_source_segment(code, el) for el in iter_node.elts]
+        return iter_node.elts
     if is_constant_range(iter_node):
         args = [a.value for a in iter_node.args]
-        code = "[{}]".format(", ".join(map(str, range(*args))))
-        return iterator_elements(ast.parse(code).body[0].value, code)
+        return [ast.Constant(n) for n in range(*args)]
     if is_call_of_name(iter_node, "enumerate"):
-        inner_elems = iterator_elements(iter_node.args[0], code)
-        code = "[{}]".format(
-            ", ".join(["({}, {})".format(i, el) for i, el in enumerate(inner_elems)])
-        )
-        return iterator_elements(ast.parse(code).body[0].value, code)
+        inner_elems = iterator_elements(iter_node.args[0])
+        return [
+            # See FIXME below about expression locations
+            ast.Tuple(
+                elts=[
+                    ast.fix_missing_locations(ast.Constant(i)),
+                    ast.fix_missing_locations(el),
+                ],
+                ctx=ast.Load(),
+            )
+            for i, el in enumerate(inner_elems)
+        ]
     raise NotImplementedError(ast.dump(iter_node))
 
 
@@ -54,14 +60,17 @@ class InlineFor(ast.NodeTransformer):
         if not is_pure(node.iter):
             return node
 
-        target_code = ast.get_source_segment(self.code, node.target)
-        new_code = ""
-        for x in iterator_elements(node.iter, self.code):
-            new_code += f"{target_code} = {x}\n"
-            for l in node.body:
-                new_code += ast.get_source_segment(self.code, l) + "\n"
-        new_ast = ast.parse(new_code, filename=self.filename)
-        return new_ast.body
+        new_body = []
+        for x in iterator_elements(node.iter):
+            # FIXME: this should probably use the location the expression
+            # actually appeared in (the range(n) call or the element in a
+            # literal list/tuple).
+            ast.fix_missing_locations(x)
+            new_body.append(
+                ast.copy_location(ast.Assign(targets=[node.target], value=x), node)
+            )
+            new_body.extend(node.body)
+        return new_body
 
 
 def fast(fn):
