@@ -95,6 +95,15 @@ def nested_loops():
     return n
 
 
+def while_loop():
+    n = 0
+    for i in range(1):
+        while True:
+            break
+        n += 1
+    return n
+
+
 test_fns = [
     range_loop,
     enumerate_loop,
@@ -105,6 +114,7 @@ test_fns = [
     break_continue,
     multiple_loops,
     nested_loops,
+    while_loop,
 ]
 
 
