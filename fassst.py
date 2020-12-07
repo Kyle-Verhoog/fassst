@@ -7,6 +7,36 @@ import types
 import typing
 
 
+def is_call_of_name(node, name):
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == name
+    )
+
+
+def is_constant_range(node):
+    return is_call_of_name(node, "range") and all(
+        isinstance(arg, ast.Constant) for arg in node.args
+    )
+
+
+def iterator_elements(iter_node, code):
+    if isinstance(iter_node, (ast.List, ast.Tuple)):
+        return [ast.get_source_segment(code, el) for el in iter_node.elts]
+    if is_constant_range(iter_node):
+        args = [a.value for a in iter_node.args]
+        code = "[{}]".format(", ".join(map(str, range(*args))))
+        return iterator_elements(ast.parse(code).body[0].value, code)
+    if is_call_of_name(iter_node, "enumerate"):
+        inner_elems = iterator_elements(iter_node.args[0], code)
+        code = "[{}]".format(
+            ", ".join(["({}, {})".format(i, el) for i, el in enumerate(inner_elems)])
+        )
+        return iterator_elements(ast.parse(code).body[0].value, code)
+    raise NotImplementedError(ast.dump(iter_node))
+
+
 class InlineFor(ast.NodeTransformer):
     def __init__(self, code, filename):
         self.code = code
@@ -21,11 +51,10 @@ class InlineFor(ast.NodeTransformer):
         if not is_pure(node.iter):
             return node
 
-        iter_code = ast.get_source_segment(self.code, node.iter)
         target_code = ast.get_source_segment(self.code, node.target)
         new_code = ""
-        for x in eval(iter_code):
-            new_code += f"{target_code} = {repr(x)}\n"
+        for x in iterator_elements(node.iter, self.code):
+            new_code += f"{target_code} = {x}\n"
             for l in node.body:
                 new_code += ast.get_source_segment(self.code, l) + "\n"
         new_ast = ast.parse(new_code, filename=self.filename)
