@@ -9,7 +9,7 @@ jobs:
         with:
           python-version: '3.9'
       - run: pip install riot==0.4
-      - run: riot -v run black --check .
+      - run: riot -v run -s black -- --check .
   test:
     strategy:
       matrix:

@@ -9,14 +9,25 @@ venv = Venv(
                 3.8,
                 3.9,
             ],
-            name="test",
-            command="pytest {cmdargs}",
             pkgs={
+                "pytest": latest,
                 "pytest-benchmark": latest,
             },
+            venvs=[
+                Venv(
+                    name="test",
+                    command="pytest --benchmark-disable {cmdargs}",
+                ),
+                Venv(
+                    name="bench",
+                    command="pytest --benchmark-group-by=param {cmdargs}",
+                ),
+            ],
         ),
         Venv(
-            name="fmt",
+            pkgs={
+                "black": "==20.8b1",
+            },
             venvs=[
                 Venv(
                     name="black",
