@@ -19,10 +19,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     license="Apache 2",
-    packages=["fassst"],
-    package_dir={
-        "fassst": "src",
-    },
+    py_modules=["fassst"],
     python_requires=">=3.8",
     install_requires=[],
     setup_requires=["setuptools_scm"],
