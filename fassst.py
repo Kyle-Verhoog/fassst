@@ -35,8 +35,7 @@ def iterator_elements(iter_node):
     if is_call_of_name(iter_node, "enumerate"):
         inner_elems = iterator_elements(iter_node.args[0])
         return [
-            # See FIXME below about expression locations
-            ast.Tuple(elts=[ast.Constant(i), el,], ctx=ast.Load(),)
+            ast.Tuple(elts=[ast.Constant(i), el], ctx=ast.Load())
             for i, el in enumerate(inner_elems)
         ]
     raise NotImplementedError(ast.dump(iter_node))
@@ -64,12 +63,27 @@ def read_placeholder(instruction):
     return (ty, *[int(n) for n in args])
 
 
+class ReplaceBreakContinue(ast.NodeTransformer):
+    def __init__(self, loop_id):
+        self.loop_id = loop_id
+        super().__init__()
+
+    def visit_Break(self, node):
+        return make_placeholder("break", self.loop_id)
+
+    def visit_Continue(self, node):
+        return make_placeholder("continue", self.loop_id)
+
+    def visit_While(self, node):
+        return node
+
+    def visit_For(self, node):
+        return InlineFor(loop_id=self.loop_id + 1).visit(node)
+
+
 class InlineFor(ast.NodeTransformer):
-    def __init__(self, code, filename):
-        self.code = code
-        self.filename = filename
-        self.loop_id = 0
-        self.loop_id_stack = []
+    def __init__(self, loop_id=0):
+        self.loop_id = loop_id
         super().__init__()
 
     def visit_For(self, node):
@@ -81,16 +95,14 @@ class InlineFor(ast.NodeTransformer):
             return node
 
         loop_id = self.loop_id
-        self.loop_id_stack.append(loop_id)
-        self.loop_id += 1
-
+        replace_break_continue = ReplaceBreakContinue(loop_id)
         new_body = []
         for i, x in enumerate(iterator_elements(node.iter)):
             new_body.append(
                 ast.copy_location(ast.Assign(targets=[node.target], value=x), node)
             )
             for n in node.body:
-                new_n = self.visit(n)
+                new_n = replace_break_continue.visit(n)
                 if isinstance(new_n, list):
                     new_body.extend(new_n)
                 else:
@@ -98,16 +110,7 @@ class InlineFor(ast.NodeTransformer):
             new_body.append(make_placeholder("iteration_end", loop_id, i))
         new_body.append(make_placeholder("loop_end", loop_id))
 
-        self.loop_id_stack.pop()
         return new_body
-
-    def visit_Break(self, node):
-        loop_id = self.loop_id_stack[-1]
-        return make_placeholder("break", loop_id)
-
-    def visit_Continue(self, node):
-        loop_id = self.loop_id_stack[-1]
-        return make_placeholder("continue", loop_id)
 
 
 def fast(fn):
@@ -119,7 +122,7 @@ def fast(fn):
     # Before
     # print(ast.dump(tree, indent=2))
 
-    new_tree = InlineFor(src, code.co_filename).visit(tree)
+    new_tree = InlineFor().visit(tree)
     # FIXME: We should properly set the locations of things
     new_tree = ast.fix_missing_locations(new_tree)
 
