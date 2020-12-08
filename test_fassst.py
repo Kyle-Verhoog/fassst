@@ -63,6 +63,47 @@ def local_value_list_loop():
     return x
 
 
+def break_continue():
+    ns = []
+    for i in range(10):
+        if i == 0:
+            continue
+        if i == 4:
+            break
+        ns.append(i)
+    return ns
+
+
+def multiple_loops():
+    n = 0
+    for i in range(3):
+        n += 1
+    for i in range(4):
+        n += 2
+    return n
+
+
+def nested_loops():
+    n = 0
+    for i in range(3):
+        if i == 1:
+            break
+        for i in range(5):
+            n += 3
+            if i == 3:
+                continue
+    return n
+
+
+def while_loop():
+    n = 0
+    for i in range(1):
+        while True:
+            break
+        n += 1
+    return n
+
+
 test_fns = [
     range_loop,
     enumerate_loop,
@@ -70,6 +111,10 @@ test_fns = [
     list_int_loop,
     class_loop,
     local_value_list_loop,
+    break_continue,
+    multiple_loops,
+    nested_loops,
+    while_loop,
 ]
 
 
